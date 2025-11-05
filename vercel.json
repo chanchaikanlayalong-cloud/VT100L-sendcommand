@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/send", "dest": "/api/send.js", "methods": ["POST", "OPTIONS"] }
+  ]
+}

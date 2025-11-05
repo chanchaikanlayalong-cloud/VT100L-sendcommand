@@ -1,0 +1,9 @@
+# IDE/ระบบปฏิบัติการ
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cache/Temp
+*.log
+*.tmp

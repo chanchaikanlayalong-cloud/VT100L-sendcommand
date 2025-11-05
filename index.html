@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Traccar Command Console</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #eef1f6;
+      color: #333;
+      padding: 30px;
+    }
+    .container {
+      max-width: 950px;
+      margin: auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      padding: 30px 40px;
+    }
+    h2, h3 {
+      text-align: center;
+      color: #007bff;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 1em;
+    }
+    textarea { height: 100px; resize: vertical; }
+    button {
+      background: #007bff;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover { background: #0056b3; }
+    .mode-buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .mode-buttons button {
+      flex: 1;
+      background: #f1f1f1;
+      color: #333;
+      border: 1px solid #ccc;
+    }
+    .mode-buttons button.active {
+      background: #007bff;
+      color: white;
+      border: none;
+    }
+    .hidden { display: none; }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    /* 📋 ตารางคำสั่งด่วน */
+    table.quickcmd-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.95em;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 20px;
+    }
+    .quickcmd-table th, .quickcmd-table td {
+      border: 1px solid #ddd;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .quickcmd-table th {
+      background: #007bff;
+      color: white;
+      text-align: center;
+    }
+    .quickcmd-table tr:nth-child(even) { background: #f8f9fa; }
+
+    .cmd-input {
+      width: 100%;
+      max-width: 350px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #bbb;
+      font-family: monospace;
+      font-size: 0.9em;
+      box-sizing: border-box;
+      background: #fff;
+    }
+
+    .quickcmd-table button {
+      width: 110px;
+      padding: 6px 10px;
+      background: #28a745;
+      border-radius: 6px;
+      border: none;
+      color: white;
+      font-size: 0.9em;
+      transition: 0.2s;
+    }
+    .quickcmd-table button:hover {
+      background: #218838;
+    }
+
+    .quickcmd-table th:nth-child(1) { width: 40%; }
+    .quickcmd-table th:nth-child(2) { width: 45%; }
+    .quickcmd-table th:nth-child(3) { width: 15%; text-align:center; }
+    .quickcmd-table td:nth-child(3) { text-align:center; }
+
+    /* 📊 ตารางผลลัพธ์ */
+    table#resultTable {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.9em;
+      margin-top: 15px;
+    }
+    #resultTable th, #resultTable td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      vertical-align: top;
+    }
+    #resultTable th {
+      background: #007bff;
+      color: white;
+    }
+    tr:nth-child(even) { background: #f8f9fa; }
+
+    .ok { color: green; }
+    .fail { color: red; }
+
+    .summary {
+      background: #f8f9fa;
+      margin-top: 15px;
+      padding: 12px;
+      border-left: 5px solid #007bff;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📡 Traccar Multi Command Console</h2>
+
+    <div class="mode-buttons">
+      <button id="btnManual" class="active" onclick="setMode('manual')">📝 กรอก IMEI เอง</button>
+      <button id="btnCSV" onclick="setMode('csv')">📁 ใช้ไฟล์ CSV</button>
+    </div>
+
+    <div id="manualMode">
+      <label>IMEI หลายตัว (คั่นด้วย , หรือบรรทัดใหม่)</label>
+      <textarea id="manualIMEIs" placeholder="862771075372493, 862771075372494"></textarea>
+    </div>
+
+    <div id="csvMode" class="hidden">
+      <label>อัปโหลดไฟล์ CSV (ต้องมีคอลัมน์ IMEI หรือ uniqueId)</label>
+      <input type="file" id="csvFile" accept=".csv">
+      <label>เลือกคอลัมน์ IMEI</label>
+      <select id="imeiColumn"></select>
+    </div>
+
+    <label>กรอก Data Command</label>
+    <input id="dataCommand" placeholder="808,100">
+
+    <div class="actions">
+      <button onclick="sendAll()">🚀 ส่งคำสั่งทั้งหมด</button>
+      <button onclick="exportExcel()">📦 Export Excel</button>
+    </div>
+
+    <h3>⚙️ ตารางคำสั่งด่วน</h3>
+    <table class="quickcmd-table">
+      <thead>
+        <tr><th>คำสั่ง</th><th>แก้ไขคำสั่ง</th><th>Action</th></tr>
+      </thead>
+      <tbody id="quickCommands"></tbody>
+    </table>
+
+    <h3>📊 ผลลัพธ์</h3>
+    <table id="resultTable">
+      <thead><tr><th>IMEI</th><th>Status</th><th>Message</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="summary" id="summaryBox"></div>
+  </div>
+
+  <script>
+    const API_URL = "http://18.142.155.204:8082/api/commands/send";
+    const AUTH = btoa("admin:admin123");
+    let mode = "manual", parsedData = [], columns = [];
+
+    const commandList = [
+      ["🔧 ตั้งค่า IP / พอร์ต", "0000,100,1,18.142.155.204,5222"],
+      ["🌐 ตั้งค่า APN AIS", "0000,109,onelink.net"],
+      ["🌐 ตั้งค่า APN True", "0000,109,internet"],
+      ["🔁 รีสตาร์ทอุปกรณ์", "0000,910,3"],
+      ["ตั้งค่าช่วงเวลาส่งข้อมูล", "0000,102,30,60"],
+      ["ตั้งค่าความเร็วเกิน", "0000,123,80"],
+      ["Sleep Mode 0", "0000,124,0"],
+      ["Sleep Mode 1", "0000,124,1"],
+      ["Sleep Mode 2", "0000,124,2"],
+      ["ตั้งค่า Output Relay", "0000,251,1,0"],
+      ["ตั้งค่า Output buzzer", "0000,251,1,3,0,500,500,0"],
+      ["ตั้งค่าเลขไมล์", "0000,610,0"],
+      ["ล้างข้อมูล GPRS/SMS", "0000,611,1"],
+      ["ตัดสตาร์ทเครื่องยนต์", "0000,900,1,1"],
+      ["ไม่ตัดสตาร์ทเครื่องยนต์", "0000,900,1,0"],
+      ["📍 ดึงตำแหน่งปัจจุบัน", "800"],
+      ["🔢 ตรวจสอบ SN/IMEI", "801"],
+      ["⚙️ ตรวจสอบสถานะอุปกรณ์", "802"],
+      ["🧾 ตรวจสอบ IP,port", "808,100"],
+      ["🧾 ตรวจสอบช่วงเวลาส่งข้อมูล", "808,102"]
+    ];
+
+    function renderQuickCommands() {
+      const tbody = document.getElementById("quickCommands");
+      tbody.innerHTML = "";
+      commandList.forEach(([label, cmd], i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${label}</td>
+          <td><input class="cmd-input" id="cmd_${i}" value="${cmd}"></td>
+          <td><button onclick="sendQuickCommand(${i})">🚀 ส่งคำสั่งนี้</button></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    renderQuickCommands();
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById("manualMode").classList.toggle("hidden", m !== "manual");
+      document.getElementById("csvMode").classList.toggle("hidden", m !== "csv");
+      document.getElementById("btnManual").classList.toggle("active", m === "manual");
+      document.getElementById("btnCSV").classList.toggle("active", m === "csv");
+    }
+
+    document.getElementById("csvFile").addEventListener("change", e => {
+      const file = e.target.files[0];
+      Papa.parse(file, {
+        header: true,
+        complete: res => {
+          parsedData = res.data;
+          columns = res.meta.fields;
+          const select = document.getElementById("imeiColumn");
+          select.innerHTML = "";
+          columns.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c; opt.text = c;
+            select.appendChild(opt);
+          });
+          alert("✅ โหลด CSV สำเร็จ: " + parsedData.length + " แถว");
+        }
+      });
+    });
+
+    function getIMEIs() {
+      if (mode === "manual") {
+        return document.getElementById("manualIMEIs").value
+          .split(/[\n,]+/).map(x => x.trim()).filter(Boolean);
+      } else {
+        const col = document.getElementById("imeiColumn").value;
+        return parsedData.map(r => r[col]).filter(Boolean);
+      }
+    }
+
+    async function sendQuickCommand(index) {
+      const cmd = document.getElementById(`cmd_${index}`).value.trim();
+      const imeiList = getIMEIs();
+      if (imeiList.length === 0) return alert("⚠️ กรุณาใส่ IMEI ก่อน!");
+      if (!cmd) return alert("⚠️ กรุณาใส่คำสั่งก่อนส่ง!");
+      const confirmSend = confirm(`ต้องการส่งคำสั่ง "${cmd}" ไปยัง ${imeiList.length} เครื่องหรือไม่?`);
+      if (!confirmSend) return;
+      for (const imei of imeiList) await sendCommand(imei, cmd);
+      alert(`✅ ส่งคำสั่ง "${cmd}" สำเร็จ`);
+    }
+
+    async function sendCommand(imei, data) {
+      try {
+        const body = {
+          uniqueId: imei, description: "custom", type: "custom", attributes: { data }
+        };
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "Authorization": "Basic " + AUTH},
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        console.log(imei, res.ok ? "✅ Success" : "❌ Fail", json);
+      } catch (err) {
+        console.error("❌ Error", err.message);
+      }
+    }
+
+    async function sendAll() {
+      const data = document.getElementById("dataCommand").value.trim();
+      const imeiList = getIMEIs();
+      if (!data) return alert("⚠️ กรุณาใส่ Data Command");
+      if (imeiList.length === 0) return alert("⚠️ กรุณาใส่ IMEI ก่อน!");
+      for (const imei of imeiList) await sendCommand(imei, data);
+      alert("✅ ส่งคำสั่งทั้งหมดแล้ว");
+    }
+
+    function exportExcel() {
+      alert("📦 Export Excel ยังเหมือนเดิม (สามารถเพิ่มผลลัพธ์จริงได้ภายหลัง)");
+    }
+  </script>
+</body>
+</html>

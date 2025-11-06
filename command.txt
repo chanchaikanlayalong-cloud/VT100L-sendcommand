@@ -1,0 +1,9 @@
+git remote remove origin
+git remote add origin https://github.com/chanchaikanlayalong-cloud/VT100L-sendcommand.git
+git add .
+git commit -m "update files"
+git branch -M main
+git push -f origin main
+git add .
+git commit -m "change API_URL to vercel proxy"
+git push
